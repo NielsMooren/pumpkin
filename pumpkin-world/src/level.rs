@@ -26,6 +26,7 @@ use crate::{
     },
     generation::{Seed, WorldGenerator, get_world_gen},
     lock::{LevelLocker, anvil::AnvilLevelLocker},
+    world::SimpleWorld,
     world_info::{
         LevelData, WorldInfoError, WorldInfoReader, WorldInfoWriter,
         anvil::{AnvilLevelInfo, LEVEL_DAT_BACKUP_FILE_NAME, LEVEL_DAT_FILE_NAME},
@@ -100,11 +101,11 @@ impl Level {
                 WorldInfoError::InfoNotFound => (),
                 WorldInfoError::UnsupportedVersion(version) => {
                     log::error!("Failed to load world info!, {version}");
-                    log::error!("{}", error);
+                    log::error!("{error}");
                     panic!("Unsupported world data! See the logs for more info.");
                 }
                 e => {
-                    panic!("World Error {}", e);
+                    panic!("World Error {e}");
                 }
             }
         } else {
@@ -189,7 +190,7 @@ impl Level {
 
         // Lets not stop the overall save for this
         if let Err(err) = result {
-            log::error!("Failed to save level.dat: {}", err);
+            log::error!("Failed to save level.dat: {err}");
         }
     }
 
@@ -212,7 +213,7 @@ impl Level {
     /// before
     pub async fn mark_chunks_as_newly_watched(&self, chunks: &[Vector2<i32>]) {
         for chunk in chunks {
-            log::trace!("{:?} marked as newly watched", chunk);
+            log::trace!("{chunk:?} marked as newly watched");
             match self.chunk_watchers.entry(*chunk) {
                 Entry::Occupied(mut occupied) => {
                     let value = occupied.get_mut();
@@ -220,7 +221,7 @@ impl Level {
                         *value = new_value;
                         //log::debug!("Watch value for {:?}: {}", chunk, value);
                     } else {
-                        log::error!("Watching overflow on chunk {:?}", chunk);
+                        log::error!("Watching overflow on chunk {chunk:?}");
                     }
                 }
                 Entry::Vacant(vacant) => {
@@ -245,7 +246,7 @@ impl Level {
         let mut chunks_to_clean = Vec::new();
 
         for chunk in chunks {
-            log::trace!("{:?} marked as no longer watched", chunk);
+            log::trace!("{chunk:?} marked as no longer watched");
             match self.chunk_watchers.entry(*chunk) {
                 Entry::Occupied(mut occupied) => {
                     let value = occupied.get_mut();
@@ -321,6 +322,17 @@ impl Level {
         });
     }
 
+    pub async fn tick_block_entities(&self, world: Arc<dyn SimpleWorld>) {
+        for chunk in self.loaded_chunks.iter() {
+            let chunk = chunk.read().await;
+            let cloned_entities = chunk.block_entities.clone();
+            drop(chunk);
+            for block_entity in &cloned_entities {
+                block_entity.1.1.tick(&world).await;
+            }
+        }
+    }
+
     pub async fn clean_chunk(self: &Arc<Self>, chunk: &Vector2<i32>) {
         self.clean_chunks(&[*chunk]).await;
     }
@@ -391,7 +403,7 @@ impl Level {
             .save_chunks(&level_folder, chunks_to_write)
             .await
         {
-            log::error!("Failed writing Chunk to disk {}", error);
+            log::error!("Failed writing Chunk to disk {error}");
         }
     }
 
@@ -501,9 +513,7 @@ impl Level {
                             // this is an error, and we should log it
                             error => {
                                 log::error!(
-                                    "Failed to load chunk at {:?}: {} (regenerating)",
-                                    pos,
-                                    error
+                                    "Failed to load chunk at {pos:?}: {error} (regenerating)"
                                 );
                             }
                         };
