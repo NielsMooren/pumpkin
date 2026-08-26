@@ -1,0 +1,4 @@
+# Generated at runtime by the server: world data, logs, plugins, and the
+# pumpkin.toml that setup-config.py patches. None of it belongs in git.
+run/
+__pycache__/
